@@ -1,5 +1,5 @@
 {
-  "name": "yii-dream-team/yii2-upload-behavior",
+  "name": "geos333/yii2-upload-behavior",
   "type": "yii2-extension",
   "description": "Yii2 file/image upload behavior for ActiveRecord",
   "keywords": [
@@ -24,6 +24,7 @@
   "require": {
     "php": ">=5.4.0",
     "yiisoft/yii2": "*",
+    "yiisoft/yii2-imagine": "*",
     "masterexploder/phpthumb": "*"
   },
   "repositories": [

@@ -9,6 +9,8 @@ namespace yiidreamteam\upload;
 use PHPThumb\GD;
 use yii\helpers\ArrayHelper;
 use yii\helpers\FileHelper;
+use yii\imagine\Image;
+use Imagine\Image\Box;
 
 /**
  * Class ImageUploadBehavior
@@ -16,7 +18,7 @@ use yii\helpers\FileHelper;
 class ImageUploadBehavior extends FileUploadBehavior
 {
     public $attribute = 'image';
-
+    public $quality = 60;
     public $createThumbsOnSave = true;
     public $createThumbsOnRequest = false;
 
@@ -57,10 +59,16 @@ class ImageUploadBehavior extends FileUploadBehavior
      * @param string $profile
      * @return string
      */
-    public function getThumbFilePath($attribute, $profile = 'thumb')
+    public function getThumbFilePath($attribute, $profile = 'thumb', $extension = null)
     {
         $behavior = static::getInstance($this->owner, $attribute);
-        return $behavior->resolveProfilePath($behavior->thumbPath, $profile);
+        $thumbPath = $behavior->thumbPath;
+
+        if ($extension) {
+            $thumbPath = str_replace('[[extension]]', $extension, $behavior->thumbPath);
+        }
+
+        return $behavior->resolveProfilePath($thumbPath, $profile);
     }
 
     /**
@@ -89,13 +97,14 @@ class ImageUploadBehavior extends FileUploadBehavior
      * @param string|null $emptyUrl
      * @return string|null
      */
-    public function getImageFileUrl($attribute, $emptyUrl = null)
+    public function getImageFileUrl($attribute, $extension = null, $emptyUrl = null)
     {
         if (!$this->owner->{$attribute}) {
             return $emptyUrl;
         }
 
-        return $this->getUploadedFileUrl($attribute);
+
+        return $this->getUploadedFileUrl($attribute, $extension);
     }
 
     /**
@@ -104,7 +113,7 @@ class ImageUploadBehavior extends FileUploadBehavior
      * @param string|null $emptyUrl
      * @return string|null
      */
-    public function getThumbFileUrl($attribute, $profile = 'thumb', $emptyUrl = null)
+    public function getThumbFileUrl($attribute, $profile = 'thumb', $extension = null, $emptyUrl = null)
     {
         if (!$this->owner->{$attribute}) {
             return $emptyUrl;
@@ -112,37 +121,50 @@ class ImageUploadBehavior extends FileUploadBehavior
 
         $behavior = static::getInstance($this->owner, $attribute);
 
+        $fileUrl = $behavior->thumbUrl;
         if ($behavior->createThumbsOnRequest) {
-            $behavior->createThumbs();
+            $behavior->createThumbs($extension);
         }
 
-        return $behavior->resolveProfilePath($behavior->thumbUrl, $profile);
+        if ($extension) {
+            $fileUrl = str_replace('[[extension]]', $extension, $behavior->thumbUrl);
+        }
+        return $behavior->resolveProfilePath($fileUrl, $profile);
     }
 
     /**
      * Creates image thumbnails
      */
-    public function createThumbs()
+    public function createThumbs($extension = null)
     {
+        if (!class_exists(Image::class)) {
+            throw new NotSupportedException("Yii2-imagine extension is required to use the UploadImageBehavior");
+        }
+
         $path = $this->getUploadedFilePath($this->attribute);
+        if (!is_file($path)) {
+            return;
+        }
+
         foreach ($this->thumbs as $profile => $config) {
             $thumbPath = static::getThumbFilePath($this->attribute, $profile);
-            if (is_file($path) && !is_file($thumbPath)) {
 
-                // setup image processor function
-                if (isset($config['processor']) && is_callable($config['processor'])) {
-                    $processor = $config['processor'];
-                    unset($config['processor']);
-                } else {
-                    $processor = function (GD $thumb) use ($config) {
-                        $thumb->adaptiveResize($config['width'], $config['height']);
-                    };
+            if ($extension) {
+                $thumbPath = static::getThumbFilePath($this->attribute, $profile, $extension);
+            }
+
+            if ($thumbPath !== null) {
+                if (!FileHelper::createDirectory(dirname($thumbPath))) {
+                    throw new InvalidArgumentException(
+                        "Directory specified in 'thumbPath' attribute doesn't exist or cannot be created."
+                    );
                 }
-
-                $thumb = new GD($path, $config);
-                call_user_func($processor, $thumb, $this->attribute);
-                FileHelper::createDirectory(pathinfo($thumbPath, PATHINFO_DIRNAME), 0775, true);
-                $thumb->save($thumbPath);
+                if (!is_file($thumbPath)) {
+                    $image = Image::getImagine()
+                        ->open($path)
+                        ->thumbnail(new Box($config['width'], $config['height']))
+                        ->save($thumbPath, ['quality' => $this->quality]);
+                }
             }
         }
     }

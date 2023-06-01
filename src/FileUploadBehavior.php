@@ -14,6 +14,7 @@ use yii\db\BaseActiveRecord;
 use yii\helpers\ArrayHelper;
 use yii\helpers\FileHelper;
 use yii\helpers\VarDumper;
+use yii\imagine\Image;
 use yii\web\UploadedFile;
 use yiidreamteam\upload\exceptions\FileUploadException;
 
@@ -145,8 +146,9 @@ class FileUploadBehavior extends \yii\base\Behavior
         $path = Yii::getAlias($path);
 
         $pi = pathinfo($this->owner->{$this->attribute});
+
         $fileName = ArrayHelper::getValue($pi, 'filename');
-        $extension = strtolower(ArrayHelper::getValue($pi, 'extension'));
+        $extension = strtolower(ArrayHelper::getValue($pi, 'extension') ?? '');
 
         return preg_replace_callback('|\[\[([\w\_/]+)\]\]|', function ($matches) use ($fileName, $extension) {
             $name = $matches[1];
@@ -233,7 +235,7 @@ class FileUploadBehavior extends \yii\base\Behavior
      * @param string $attribute
      * @return string
      */
-    public function getUploadedFilePath($attribute)
+    public function getUploadedFilePath($attribute, $extension = null)
     {
         $behavior = static::getInstance($this->owner, $attribute);
 
@@ -241,7 +243,13 @@ class FileUploadBehavior extends \yii\base\Behavior
             return '';
         }
 
-        return $behavior->resolvePath($behavior->filePath);
+        $filePath = $behavior->filePath;
+        if ($extension) {
+            $filePath = str_replace('[[extension]]', $extension, $behavior->filePath);
+
+        }
+
+        return $behavior->resolvePath($filePath);
     }
 
     /**
@@ -258,7 +266,7 @@ class FileUploadBehavior extends \yii\base\Behavior
      * @param string $attribute
      * @return string|null
      */
-    public function getUploadedFileUrl($attribute)
+    public function getUploadedFileUrl($attribute, $extension = null)
     {
         if (!$this->owner->{$attribute}) {
             return null;
@@ -266,6 +274,17 @@ class FileUploadBehavior extends \yii\base\Behavior
 
         $behavior = static::getInstance($this->owner, $attribute);
 
-        return $behavior->resolvePath($behavior->fileUrl);
+        $fileUrl = $behavior->fileUrl;
+        if ($extension) {
+            $pathWebp = $this->getUploadedFilePath($this->attribute, $extension);
+            $path = $this->getUploadedFilePath($this->attribute);
+            if (file_exists($path)) {
+                $image = Image::getImagine()->open($path)->save($pathWebp);
+            }
+
+            $fileUrl = str_replace('[[extension]]', $extension, $behavior->fileUrl);
+
+        }
+        return $behavior->resolvePath($fileUrl);
     }
 }
